@@ -1,6 +1,6 @@
 import type Konva from 'konva'
 import { useEffect, useMemo, useRef } from 'react'
-import { Image as KonvaImage, Layer, Rect, Stage } from 'react-konva'
+import { Circle, Group, Image as KonvaImage, Layer, Line, Rect, Stage } from 'react-konva'
 import type { LoadedImage } from '../../lib/image.ts'
 import { type Size, type View, zoomAt } from '../../lib/viewport.ts'
 
@@ -11,14 +11,19 @@ interface Props {
   /** Reports the size of the canvas area whenever it changes. */
   onResize: (size: Size) => void
   size: Size
+  /**
+   * Before/after comparison. When set, the left part of the image (up to
+   * `split`, 0–1) shows `before` and the rest shows the current image.
+   */
+  compare?: { before: LoadedImage; split: number; onSplitChange: (split: number) => void }
 }
 
 /**
- * The Konva canvas. For Phase 1 it shows the photo on a transparency
- * checkerboard and supports zoom (mouse wheel / trackpad pinch) and
- * pan (drag). Later phases add layers and drawing tools here.
+ * The Konva canvas: shows the photo on a transparency checkerboard, with
+ * zoom (mouse wheel / trackpad pinch), pan (drag), and an optional
+ * before/after slider. Later phases add layers and drawing tools here.
  */
-export default function CanvasStage({ image, view, onViewChange, onResize, size }: Props) {
+export default function CanvasStage({ image, view, onViewChange, onResize, size, compare }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Watch the container so the Stage always fills it (window resize, panel toggle, tablet rotation).
@@ -91,10 +96,80 @@ export default function CanvasStage({ image, view, onViewChange, onResize, size 
               imageSmoothingEnabled={view.scale < 2}
               listening={false}
             />
+            {compare && <CompareOverlay image={image} view={view} {...compare} />}
           </Layer>
         </Stage>
       )}
     </div>
+  )
+}
+
+/**
+ * Draws the "before" image clipped to the left of the split line, plus a
+ * draggable handle. Sizes are divided by the zoom so the handle looks the
+ * same at any zoom level.
+ */
+function CompareOverlay({
+  image,
+  before,
+  view,
+  split,
+  onSplitChange,
+}: {
+  image: LoadedImage
+  before: LoadedImage
+  view: View
+  split: number
+  onSplitChange: (split: number) => void
+}) {
+  const splitX = split * image.width
+  const s = 1 / view.scale // converts screen pixels to image pixels
+
+  return (
+    <>
+      <Group clipX={0} clipY={0} clipWidth={splitX} clipHeight={image.height} listening={false}>
+        <KonvaImage image={before.source} width={image.width} height={image.height} imageSmoothingEnabled={view.scale < 2} />
+      </Group>
+
+      <Group
+        x={splitX}
+        y={0}
+        draggable
+        // Only move horizontally, and stay within the image (absolute screen coords).
+        dragBoundFunc={(pos) => ({
+          x: Math.min(view.x + image.width * view.scale, Math.max(view.x, pos.x)),
+          y: view.y,
+        })}
+        onDragMove={(e) => onSplitChange(Math.min(1, Math.max(0, e.target.x() / image.width)))}
+        onMouseEnter={(e) => {
+          const c = e.target.getStage()?.container()
+          if (c) c.style.cursor = 'ew-resize'
+        }}
+        onMouseLeave={(e) => {
+          const c = e.target.getStage()?.container()
+          if (c) c.style.cursor = ''
+        }}
+      >
+        {/* Wide invisible hit area makes the line easy to grab, even by finger */}
+        <Rect x={-12 * s} width={24 * s} height={image.height} fill="transparent" />
+        <Line points={[0, 0, 0, image.height]} stroke="white" strokeWidth={2 * s} shadowColor="black" shadowBlur={4 * s} shadowOpacity={0.6} />
+        <Circle y={image.height / 2} radius={14 * s} fill="white" shadowColor="black" shadowBlur={6 * s} shadowOpacity={0.5} />
+        <Line
+          points={[-5 * s, image.height / 2 - 5 * s, -9 * s, image.height / 2, -5 * s, image.height / 2 + 5 * s]}
+          stroke="#333"
+          strokeWidth={2 * s}
+          lineCap="round"
+          lineJoin="round"
+        />
+        <Line
+          points={[5 * s, image.height / 2 - 5 * s, 9 * s, image.height / 2, 5 * s, image.height / 2 + 5 * s]}
+          stroke="#333"
+          strokeWidth={2 * s}
+          lineCap="round"
+          lineJoin="round"
+        />
+      </Group>
+    </>
   )
 }
 

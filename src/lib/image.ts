@@ -117,3 +117,67 @@ export async function prepareUpload(file: File): Promise<LoadedImage> {
     thumbnailUrl: makeThumbnail(source),
   }
 }
+
+/** Any drawable we use as a layer source. */
+export type ImageSource = HTMLImageElement | HTMLCanvasElement
+
+/** Wrap a canvas (e.g. an AI result) as a LoadedImage. */
+export function canvasToLoadedImage(canvas: HTMLCanvasElement, name: string): LoadedImage {
+  return {
+    source: canvas,
+    width: canvas.width,
+    height: canvas.height,
+    name,
+    wasResized: false,
+    originalWidth: canvas.width,
+    originalHeight: canvas.height,
+    thumbnailUrl: makeThumbnail(canvas),
+  }
+}
+
+/**
+ * Decode an image Blob (e.g. the AI's result) and fit it onto a canvas of
+ * exactly `width`×`height`, so the result lines up with the original photo.
+ * If the aspect ratio differs slightly, the image is scaled to cover the
+ * canvas and centered (a few edge pixels may be trimmed, never stretched).
+ */
+export async function blobToCanvas(blob: Blob, width: number, height: number): Promise<HTMLCanvasElement> {
+  const bitmap = await createImageBitmap(blob)
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Your browser could not create a drawing canvas.')
+  const scale = Math.max(width / bitmap.width, height / bitmap.height)
+  const w = bitmap.width * scale
+  const h = bitmap.height * scale
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(bitmap, (width - w) / 2, (height - h) / 2, w, h)
+  bitmap.close()
+  return canvas
+}
+
+/** Size limit for images we upload to the AI (the server accepts 3.5 MB). */
+const AI_UPLOAD_MAX_BYTES = 3 * 1024 * 1024
+
+/**
+ * Prepare an image for the AI: scale it so the longest side is at most
+ * `maxDim`, then encode it compactly (WEBP keeps transparency; falls back to
+ * PNG in browsers without WEBP encoding, then to JPEG if still too big).
+ */
+export function encodeForAi(source: ImageSource, maxDim = 1536): { dataUrl: string; width: number; height: number } {
+  const scale = Math.min(1, maxDim / Math.max(source.width, source.height))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(source.width * scale)
+  canvas.height = Math.round(source.height * scale)
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Your browser could not create a drawing canvas.')
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(source, 0, 0, canvas.width, canvas.height)
+
+  const bytes = (url: string) => Math.floor(((url.length - url.indexOf(',') - 1) * 3) / 4)
+  let dataUrl = canvas.toDataURL('image/webp', 0.92)
+  if (bytes(dataUrl) > AI_UPLOAD_MAX_BYTES) dataUrl = canvas.toDataURL('image/jpeg', 0.9)
+  if (bytes(dataUrl) > AI_UPLOAD_MAX_BYTES) dataUrl = canvas.toDataURL('image/jpeg', 0.75)
+  return { dataUrl, width: canvas.width, height: canvas.height }
+}
