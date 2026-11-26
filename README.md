@@ -214,5 +214,6 @@ Netlify deploys your **production branch** (usually `main`) to the main URL. To 
 - **`aiKeyConfigured: false`:** the variable name must be exactly `OPENAI_API_KEY`, and you must redeploy after adding it.
 - **"Can't reach the AI backend":** locally, use `netlify dev` and port 8888, not `npm run dev`.
 - **"The OpenAI account is out of credits":** add billing credits at <https://platform.openai.com/settings/organization/billing>.
+- **AI edits stay "Waiting for the AI…" and then fail on Netlify:** the job uses a Netlify *background function*. These work on Netlify's current Free/Personal/Pro plans but not on older "Legacy" plans. Check your plan under Team settings → Billing.
 - **An AI edit failed:** open your Netlify project → **Logs → Functions** and look at `ai-run-background`. Errors are logged there (never your key).
 - **Image rejected:** only JPG/PNG/WEBP under 10 MB are accepted. Images larger than 4096px on a side are automatically scaled down.
