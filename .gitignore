@@ -1,0 +1,8 @@
+
+# ---- Secrets: NEVER commit these ----
+.env
+.env.*
+!.env.example
+
+# Netlify CLI local state
+.netlify

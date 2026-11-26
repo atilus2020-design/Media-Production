@@ -1,0 +1,35 @@
+# Netlify configuration: https://docs.netlify.com/configure-builds/file-based-configuration/
+
+[build]
+  # Command Netlify runs to build the site
+  command = "npm run build"
+  # Folder Vite outputs the built site into
+  publish = "dist"
+  # Folder containing our serverless functions (where the AI key lives)
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Local development with `netlify dev`: runs Vite AND the functions together,
+# so http://localhost:8888 serves the app and /api/* hits the functions.
+[dev]
+  command = "npm run dev"
+  targetPort = 5173
+  port = 8888
+  framework = "#custom"
+
+# Single-page app: send every unknown route (e.g. /editor) to index.html so
+# React Router can handle it. Function routes (/api/*) are matched first.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Basic security headers for every page
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "strict-origin-when-cross-origin"
